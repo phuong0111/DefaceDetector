@@ -16,10 +16,9 @@ now = time.strftime("%a %b %d %H:%M:%S %Z %Y")
 
 def main(args):
     """
-    Main function to process Wazuh alerts and send to Flask server
+    Main function to process Wazuh alerts and send to listener server
     Following official Wazuh integration specification
     """
-    debug("# Starting Flask integration")
     debug(f"# Number of arguments: {len(args)}")
     debug(f"# Arguments: {args}")
     
@@ -48,8 +47,8 @@ def main(args):
         debug("# Alert loaded successfully")
         debug(f"# Alert content: {json.dumps(json_alert, indent=2)}")
         
-        # Send alert to Flask server
-        send_alert_to_flask(json_alert, hook_url, api_key)
+        # Send alert to listener server
+        send_alert_to_listener(json_alert, hook_url, api_key)
         
     except FileNotFoundError:
         debug(f"# Error: Alert file not found: {alert_file_location}")
@@ -61,9 +60,9 @@ def main(args):
         debug(f"# Error processing alert: {str(e)}")
         sys.exit(1)
 
-def send_alert_to_flask(alert, hook_url, api_key):
+def send_alert_to_listener(alert, hook_url, api_key):
     """
-    Send the alert to the Flask webhook endpoint
+    Send the alert to the listener webhook endpoint
     """
     try:
         # Use hook_url from command line argument or fall back to default
@@ -85,7 +84,7 @@ def send_alert_to_flask(alert, hook_url, api_key):
         # Prepare headers
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Wazuh-Flask-Integration/1.0'
+            'User-Agent': 'Wazuh-listener-Integration/1.0'
         }
         
         # Add API key to headers if provided
@@ -107,7 +106,7 @@ def send_alert_to_flask(alert, hook_url, api_key):
             debug(f"# Error extracting alert details: {str(e)}")
         
         # Send the alert
-        debug("# Sending alert to Flask server")
+        debug("# Sending alert to listener server")
         response = session.post(
             webhook_url,
             json=alert,
@@ -123,10 +122,10 @@ def send_alert_to_flask(alert, hook_url, api_key):
             debug(f"# Response: {response.text}")
             
     except requests.exceptions.ConnectionError as e:
-        debug(f"# Connection error: Cannot reach Flask server at {webhook_url}")
+        debug(f"# Connection error: Cannot reach listener server at {webhook_url}")
         debug(f"# Error details: {str(e)}")
     except requests.exceptions.Timeout as e:
-        debug(f"# Timeout error: Flask server did not respond within 30 seconds")
+        debug(f"# Timeout error: listener server did not respond within 30 seconds")
         debug(f"# Error details: {str(e)}")
     except requests.exceptions.RequestException as e:
         debug(f"# Network error sending alert: {str(e)}")
