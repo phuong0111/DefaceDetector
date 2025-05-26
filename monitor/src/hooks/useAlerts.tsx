@@ -1,4 +1,4 @@
-// src/hooks/useAlerts.tsx
+// src/hooks/useAlerts.ts
 import { useState, useEffect } from 'react';
 import { WazuhAlert } from '../types/alert';
 import { WebhookService } from '../services/webhook';

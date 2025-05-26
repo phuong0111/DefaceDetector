@@ -7,6 +7,8 @@ export class WebhookService {
     private listeners: ((alert: WazuhAlert) => void)[] = [];
     private isConnected: boolean = false;
     private connectionListeners: ((status: boolean) => void)[] = [];
+    private websocket: WebSocket | null = null;
+    private reconnectInterval: NodeJS.Timeout | null = null;
 
     static getInstance(): WebhookService {
         if (!this.instance) {
@@ -16,47 +18,81 @@ export class WebhookService {
     }
 
     startListening(): void {
-        // Simulate webhook server connection
-        this.isConnected = true;
-        this.notifyConnectionListeners(true);
-
-        // Simulate receiving alerts periodically for demo
-        this.simulateAlerts();
+        // Connect to WebSocket server that receives webhook data
+        this.connectWebSocket();
     }
 
-    private simulateAlerts(): void {
-        setInterval(() => {
-            const mockAlert: WazuhAlert = {
-                id: Math.random().toString(36).substr(2, 9),
-                timestamp: new Date().toISOString(),
-                rule: {
-                    id: Math.floor(Math.random() * 1000) + 1000,
-                    description: this.getRandomAlertDescription(),
-                    level: Math.floor(Math.random() * 15) + 1
-                },
-                agent: {
-                    name: `server-${Math.floor(Math.random() * 10) + 1}`,
-                    ip: `192.168.1.${Math.floor(Math.random() * 254) + 1}`
-                },
-                data: {}
+    private connectWebSocket(): void {
+        try {
+            // Connect to a WebSocket server on port 5001 that forwards webhook data
+            this.websocket = new WebSocket('ws://localhost:5001/ws');
+
+            this.websocket.onopen = () => {
+                console.log('WebSocket connected to webhook server');
+                this.isConnected = true;
+                this.notifyConnectionListeners(true);
+
+                if (this.reconnectInterval) {
+                    clearInterval(this.reconnectInterval);
+                    this.reconnectInterval = null;
+                }
             };
 
-            this.addAlert(mockAlert);
-        }, 5000);
+            this.websocket.onmessage = (event) => {
+                try {
+                    const alertData = JSON.parse(event.data);
+                    const alert = this.convertToWazuhAlert(alertData);
+                    this.addAlert(alert);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            this.websocket.onclose = () => {
+                console.log('WebSocket disconnected');
+                this.isConnected = false;
+                this.notifyConnectionListeners(false);
+                this.attemptReconnect();
+            };
+
+            this.websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.isConnected = false;
+                this.notifyConnectionListeners(false);
+            };
+
+        } catch (error) {
+            console.error('Failed to connect WebSocket:', error);
+            this.isConnected = false;
+            this.notifyConnectionListeners(false);
+            this.attemptReconnect();
+        }
     }
 
-    private getRandomAlertDescription(): string {
-        const descriptions = [
-            'SSH login attempt',
-            'File integrity monitoring alert',
-            'Rootkit detection',
-            'System log anomaly',
-            'Network intrusion detected',
-            'Privilege escalation attempt',
-            'Malware detected',
-            'Configuration change detected'
-        ];
-        return descriptions[Math.floor(Math.random() * descriptions.length)];
+    private attemptReconnect(): void {
+        if (!this.reconnectInterval) {
+            this.reconnectInterval = setInterval(() => {
+                console.log('Attempting to reconnect WebSocket...');
+                this.connectWebSocket();
+            }, 5000);
+        }
+    }
+
+    private convertToWazuhAlert(alertData: any): WazuhAlert {
+        return {
+            id: alertData.id || Math.random().toString(36).substr(2, 9),
+            timestamp: alertData.timestamp || new Date().toISOString(),
+            rule: {
+                id: alertData.rule?.id || 0,
+                description: alertData.rule?.description || 'Unknown alert',
+                level: alertData.rule?.level || 1
+            },
+            agent: {
+                name: alertData.agent?.name || 'unknown',
+                ip: alertData.agent?.ip || '0.0.0.0'
+            },
+            data: alertData.data || alertData
+        };
     }
 
     addListener(callback: (alert: WazuhAlert) => void): void {
@@ -86,5 +122,18 @@ export class WebhookService {
 
     isServiceConnected(): boolean {
         return this.isConnected;
+    }
+
+    stopListening(): void {
+        if (this.websocket) {
+            this.websocket.close();
+            this.websocket = null;
+        }
+        if (this.reconnectInterval) {
+            clearInterval(this.reconnectInterval);
+            this.reconnectInterval = null;
+        }
+        this.isConnected = false;
+        this.notifyConnectionListeners(false);
     }
 }
